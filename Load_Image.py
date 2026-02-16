@@ -66,3 +66,24 @@ class ImageLoad:
         elif channels == 3:
             return "color"
         
+        
+loader = ImageLoad()
+
+size = 400
+test_img = np.zeros((size, size, 3), dtype=np.uint8)
+        
+# Градиент
+for i in range(3):
+    gradient = np.linspace(0, 255, size, dtype=np.uint8)
+    test_img[:, :, i] = np.tile(gradient, (size, 1))
+        
+cv2.rectangle(test_img, (50, 50), (150, 150), (0, 0, 0), -1)  # Синий квадрат
+
+test_path = "test_image.jpg"
+cv2.imwrite(test_path, test_img)
+print(f"Тестовое изображение создано: {test_path}")
+
+loader.load(test_path)
+color = loader.detected_color()
+
+print(color)

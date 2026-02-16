@@ -4,7 +4,7 @@ import numpy as np
 
 class ImageNoiser:
     def __init__(self):
-        self.original_image = Load_Image() 
+        self.original_image.image_array = Load_Image() 
         self.noisy_image = None
         self.noise_params = {}
         
@@ -16,12 +16,12 @@ class ImageNoiser:
         sigma:  среднее квадратичное отклонение
         """
         
-        if self.original_image is None:
+        if self.original_image.image_array is None:
             raise ValueError("Сначала загрузите изображение")
         
-        noise = np.random.normal(mean, sigma, self.original_image.shape)
+        noise = np.random.normal(mean, sigma, self.original_image.image_array.shape)
         
-        noisy = self.original_image.astype(np.float32) + noise
+        noisy = self.original_image.image_array.astype(np.float32) + noise
         noisy = np.clip(noisy, 0, 255).astype(np.uint8)
         
         self.noisy_image = noisy
