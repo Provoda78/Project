@@ -104,7 +104,7 @@ class ImageNoiser:
         y_map = yv.astype(np.float32)
         
         if filter_type == GeometricFilterType.WAVE:
-            amplitude = intensity * 50
+            amplitude = intensity * 5
             frequency = kwargs.get('frequency', 0.1)
             direction = kwargs.get('direction', 'horizontal')
             
