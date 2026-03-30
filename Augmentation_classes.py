@@ -8,11 +8,18 @@ class Noises(ABC):
     def __init__(self, image_loader: Callable = None):
         self.image_loader = image_loader 
         self.original_array = None
-        self.noisy_image = None
+        self.histogramm = None
         self.noise_params = {}
         
         if image_loader is not None and image_loader.image_array is not None:
             self.original_array = image_loader.image_array.copy()
+            
+    def save_noisy(self, filename):
+        if self.histogramm is not None:
+            cv2.imwrite(filename, self.histogramm)
+            print(f"Зашумленное изображение сохранено: {filename}")
+        else:
+            print("Нет зашумленного изображения для сохранения")
             
 class Gaussian(Noises):
     def __init__(self, image_loader = None):
@@ -100,6 +107,95 @@ class Salt_pepper_noise(Noises):
         
         return blur
     
+class Chess_mixed(Noises):
+    def __init__(self, image_loader = None):
+        super().__init__(image_loader)
+        
+    def _create_chessboard_mask(self, height: int, width: int, cell_size: int) -> np.ndarray:
+        """
+        Создает бинарную маску шахматного узора
+        """
+        mask = np.zeros((height, width), dtype=np.float32)
+        
+        # Создаем шахматный узор
+        for i in range(height):
+            for j in range(width):
+                cell_i = i // cell_size
+                cell_j = j // cell_size
+                
+                if (cell_i + cell_j) % 2 == 0:
+                    mask[i, j] = 0.0  # Первое изображение
+                else:
+                    mask[i, j] = 1.0  # Второе изображение
+        
+        return mask
+    
+    def _create_smooth_mask(self, binary_mask: np.ndarray, blend_width: int) -> np.ndarray:
+        """
+        Создает сглаженную маску с линейным градиентом на границах ячеек
+        """
+        if blend_width <= 0:
+            return binary_mask
+        
+        height, width = binary_mask.shape
+        smooth_mask = binary_mask.copy()
+        
+        kernel_size = blend_width * 2 + 1
+        kernel = np.ones((kernel_size, kernel_size), dtype=np.float32) / (kernel_size * kernel_size)
+        
+        smooth_mask = cv2.GaussianBlur(smooth_mask, (kernel_size, kernel_size), blend_width)
+        
+        smooth_mask = np.clip(smooth_mask, 0, 1)
+        
+        return smooth_mask
+    
+    def create_chessboard_blend(self, loader1: Callable, loader2: Callable, 
+                                cell_size: int = 50, blend_width: int = 10) -> np.ndarray:
+
+
+        image1, image2 = loader1.image_array, loader2.image_array
+        
+        if image1 is None or image2 is None:
+            raise ValueError("Оба изображения должны быть загружены")
+        
+        h, w = image1.shape[:2]
+        if image2.shape[:2] != (h, w):
+            image2 = cv2.resize(image2, (w, h))
+        
+        
+        if len(image1.shape) == 3:
+            result = np.zeros_like(image1, dtype=np.float32)
+        else:
+            result = np.zeros((h, w), dtype=np.float32)
+        
+        chess_mask = self._create_chessboard_mask(h, w, cell_size)
+        
+        if blend_width > 0:
+            smooth_mask = self._create_smooth_mask(chess_mask, blend_width)
+        else:
+            smooth_mask = chess_mask.astype(np.float32)
+        
+        for i in range(3 if len(image1.shape) == 3 else 1):
+            if len(image1.shape) == 3:
+                result[:, :, i] = (image1[:, :, i] * (1 - smooth_mask) + 
+                                   image2[:, :, i] * smooth_mask)
+            else:
+                result = image1 * (1 - smooth_mask) + image2 * smooth_mask
+        
+        result = np.clip(result, 0, 255).astype(np.uint8)
+        
+        self.noisy_image = result
+        self.noise_params['chessboard_blend'] = {
+            'cell_size': cell_size,
+            'blend_width': blend_width,
+            'image1_shape': image1.shape,
+            'image2_shape': image2.shape
+        }
+        
+        print(f"Создан шахматный узор с линейным смешиванием:")
+        print(f"  - Размер ячейки: {cell_size} px")
+        print(f"  - Ширина зоны смешивания: {blend_width} px")
+    
 class  Geometric_filters(ABC):
     @abstractmethod
     def generate_maps(self, width, height):
@@ -157,3 +253,83 @@ class ImageProcessor:
         
         self.processed = cv2.remap(self.original, x_map, y_map, cv2.INTER_LINEAR)
         return self.processed
+    
+    
+class Histogramm(Noises):
+    def __init__(self, image_loader = None):
+        super().__init__(image_loader)
+        self.histogramm = None
+        self.global_equalization = None
+        
+    def _calculate_cdf(self, hist: np.ndarray) -> np.ndarray:
+        """
+        Вычисляет кумулятивную функцию распределения (CDF)
+        """
+        cdf = hist.cumsum()
+        
+        # Нормализуем CDF
+        cdf_normalized = (cdf - cdf.min()) * 255 / (cdf.max() - cdf.min())
+        
+        return cdf_normalized
+    
+    def _calculate_histogram(self, loader: np.ndarray) -> np.ndarray:
+        """
+        Вычисляет гистограмму изображения
+        """
+        image = loader.image_array
+        
+        hist = np.zeros(256, dtype=np.float32)
+        
+        # Заполняем гистограмму
+        for pixel in image.flatten():
+            hist[pixel] += 1
+        
+        # Нормализуем гистограмму
+        hist = hist / image.size
+        
+        self.histogramm = hist
+        return hist
+    
+    def _global_equalization(self, loader: Callable) -> np.ndarray:
+        
+        image = loader.image_array
+        hist = self._calculate_histogram(image)
+        
+        cdf = hist.cumsum()
+        
+        #Нормализуем CDF к диапазону [0, 255]
+        cdf_normalized = (cdf - cdf.min()) * 255 / (cdf.max() - cdf.min())
+        cdf_normalized = cdf_normalized.astype(np.uint8)
+        
+        #Применяем преобразование
+        equalized = cdf_normalized[image]
+        
+        self.global_equalization = equalized
+    
+    def save_hist(self, filename):
+        if self.histogramm is not None:
+            cv2.imwrite(filename, self.histogramm)
+            print(f"Гистограмма изображения сохранена: {filename}")
+        else:
+            print("Нет гистограммы изображения")
+            
+    def save_equaliz(self, filename):
+        if self.global_equalization is not None:
+            cv2.imwrite(filename, self.global_equalization)
+            print(f"Глобальная эквализация изображения сохранена: {filename}")
+        else:
+            print("Нет глобальной эквализации изображения")
+        
+    
+if __name__ == '__main__':
+    
+    loader1 = ImageLoad()
+    loader1.load("download.jpeg")
+    
+    loader2 = ImageLoad()
+    loader2.load("download.png")
+    
+    hits = Histogramm()
+    hits._calculate_histogram(loader1)
+    
+    hits.save_hist("Pictures/histogramm.png")

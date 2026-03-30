@@ -12,7 +12,7 @@ class ImageLoad:
         try:
             self.image_array = cv2.imread(file, cv2.IMREAD_COLOR)
             
-            if self.image_array == None:
+            if self.image_array is None:
                 raise ValueError("Не удалось загрузить изображение: {file}")
             
             self.image_info = {
@@ -31,6 +31,7 @@ class ImageLoad:
             return self.image_array
         
         except Exception as ex:
+            print(ex)
             print(f'Ошибка при загрузки файла: {file}')
             return None
             

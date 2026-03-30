@@ -150,6 +150,50 @@ class ImageNoiser:
             intensity=intensity,
             radius=radius
         )
+        
+    def create_chessboard_blend(self, image1: np.ndarray, image2: np.ndarray, 
+                                cell_size: int = 50, blend_width: int = 10) -> np.ndarray:
+
+        if image1 is None or image2 is None:
+            raise ValueError("Оба изображения должны быть загружены")
+        
+        h, w = image1.shape[:2]
+        if image2.shape[:2] != (h, w):
+            image2 = cv2.resize(image2, (w, h))
+        
+        
+        if len(image1.shape) == 3:
+            result = np.zeros_like(image1, dtype=np.float32)
+        else:
+            result = np.zeros((h, w), dtype=np.float32)
+        
+        chess_mask = self._create_chessboard_mask(h, w, cell_size)
+        
+        if blend_width > 0:
+            smooth_mask = self._create_smooth_mask(chess_mask, blend_width)
+        else:
+            smooth_mask = chess_mask.astype(np.float32)
+        
+        for i in range(3 if len(image1.shape) == 3 else 1):
+            if len(image1.shape) == 3:
+                result[:, :, i] = (image1[:, :, i] * (1 - smooth_mask) + 
+                                   image2[:, :, i] * smooth_mask)
+            else:
+                result = image1 * (1 - smooth_mask) + image2 * smooth_mask
+        
+        result = np.clip(result, 0, 255).astype(np.uint8)
+        
+        self.noisy_image = result
+        self.noise_params['chessboard_blend'] = {
+            'cell_size': cell_size,
+            'blend_width': blend_width,
+            'image1_shape': image1.shape,
+            'image2_shape': image2.shape
+        }
+        
+        print(f"Создан шахматный узор с линейным смешиванием:")
+        print(f"  - Размер ячейки: {cell_size} px")
+        print(f"  - Ширина зоны смешивания: {blend_width} px")
 
     def save_noisy(self, filename):
         if self.noisy_image is not None:
