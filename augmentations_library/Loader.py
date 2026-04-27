@@ -38,21 +38,18 @@ class NoiseLoader:
 
     def load_class(self, class_name: str) -> Type[BaseEffect]:
         """Динамически импортирует класс по имени"""
-        if class_name in self._cache:
-            return self._cache[class_name]
 
         module = self._get_module()
-        klass = getattr(module, class_name, None)
+        klass_ = getattr(module, class_name, None)
 
         # Проверка: существует ли класс и является ли он наследником BaseEffect
-        if klass is None:
+        if klass_ is None:
             raise AttributeError(f"Класс {class_name} не найден в {self.library_name}")
         
-        if not inspect.isclass(klass) or not issubclass(klass, BaseEffect):
-            raise TypeError(f"Объект {class_name} не является валидным эффектом (BaseEffect)")
+        if not inspect.isclass(klass_) or not issubclass(klass_, BaseEffect):
+            raise TypeError(f"Объект {class_name} не является валидным эффектом")
 
-        self._cache[class_name] = klass
-        return klass
+        return klass_
 
     def create(self, class_name: str, **kwargs) -> BaseEffect:
         """Создает экземпляр класса с переданными параметрами"""
