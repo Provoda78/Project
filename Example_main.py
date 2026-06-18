@@ -1,16 +1,17 @@
-from augmentations_library import ImageLoader, GaussianNoise, MedianFilter, WaveEffect
+from augmentations_library import (ImageLoader, GaussianNoise, MedianFilter, WaveEffect, 
+                                   SaltPepperNoise, GaussianBlur, SwirlEffect, HistogramEqualization, 
+                                   ChessboardBlend)
 
 def solve():
 
     """Пример использования динамической загрузки пакета"""
 
     loader = ImageLoader()
-    img = loader.load("download.jpeg")
+    img = loader.load("Small.png")
+    img2 = loader.load('Small2.png')
 
     effects = [
-        WaveEffect(amplitude=15, frequency=0.02, direction='horizontal'),
-        GaussianNoise(sigma=10),
-        MedianFilter(kernel_size=3)
+        ChessboardBlend(img2)
     ]
 
     for effect in effects:
